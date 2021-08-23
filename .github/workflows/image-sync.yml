@@ -1,0 +1,36 @@
+name: image-sync
+
+on:
+    push:
+        branches: master
+
+jobs:
+    image-sync:
+        runs-on: ubuntu-latest
+        env:
+            ALIYUN_REGISTRY_PASSWORD: "${{ secrets.ALIYUN_REGISTRY_PASSWORD }}"
+            DOCKERHUB_REGISTRY_PASSWORD: "${{ secrets.DOCKERHUB_REGISTRY_PASSWORD }}"
+        steps:
+            - uses: actions/checkout@v2
+            - name: download image-syncer
+              run: |
+                  curl -L -O https://github.com/promtech-io/image-syncer/releases/download/202104141237/image-syncer.tar.gz
+                  tar -xzf image-syncer.tar.gz
+                  chmod +x image-syncer
+            - name: replace string with password
+              run: |
+                  ESCAPED_ALIYUN_REGISTRY_PASSWORD=$(printf '%s\n' "$ALIYUN_REGISTRY_PASSWORD" | sed -e 's/[\/&]/\\&/g')
+                  sed -i "s/\${ALIYUN_REGISTRY_PASSWORD}/${ESCAPED_ALIYUN_REGISTRY_PASSWORD}/g" auth.json
+                  sed -i "s/\${DOCKERHUB_REGISTRY_PASSWORD}/${DOCKERHUB_REGISTRY_PASSWORD}/g" auth.json
+                  cat auth.json
+            - name: sync
+              run: |
+                  ./image-syncer --auth auth.json  --proc 4 --images image-sync.json > output.txt
+            - name: check sync result
+              run: |
+                  if grep "Finished, 0 sync tasks failed, 0 tasks generate failed" output.txt 
+                  then
+                      exit 0
+                  else
+                      exit 1
+                  fi
